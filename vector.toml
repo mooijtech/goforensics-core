@@ -1,0 +1,22 @@
+[sources.kafka_in]
+type = "kafka"
+bootstrap_servers = "127.0.0.1:9092"
+group_id = "core"
+key_field = "uuid"
+topics = ["messages"]
+
+[sinks.elasticsearch_out]
+type = "elasticsearch"
+endpoint = "http://127.0.0.1:9200"
+inputs = [ "elasticsearch_transform" ]
+mode = "bulk"
+bulk.index = "messages"
+
+[transforms.elasticsearch_transform]
+type = "remap"
+inputs = ["kafka_in"]
+timezone = "local"
+source = """
+. = parse_json!(.message)
+"""
+drop_on_abort = true

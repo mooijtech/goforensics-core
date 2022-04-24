@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ .project.Name }}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css">
+</head>
+<body>
+
+<div class="bg-white overflow-hidden shadow rounded-lg divide-y divide-gray-200">
+    <div class="px-4 py-5 sm:px-6">
+        <h2>Body</h2>
+    </div>
+    <div class="px-4 py-5 sm:p-6">
+        {{ .message.Body }}
+    </div>
+</div>
+
+<div class="bg-white overflow-hidden shadow rounded-lg divide-y divide-gray-200">
+    <div class="px-4 py-5 sm:px-6">
+        <h2>Headers</h2>
+    </div>
+    <div class="px-4 py-5 sm:p-6">
+        {{ .message.Headers }}
+    </div>
+</div>
+
+</body>
+</html>
