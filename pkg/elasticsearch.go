@@ -53,9 +53,6 @@ func createMessagesIndex() error {
 				"uuid": map[string]interface{}{
 					"type": "keyword",
 				},
-				"user_uuid": map[string]interface{}{
-					"type": "keyword",
-				},
 				"project_uuid": map[string]interface{}{
 					"type": "keyword",
 				},

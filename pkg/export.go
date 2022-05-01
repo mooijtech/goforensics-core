@@ -8,20 +8,21 @@ import (
 	"fmt"
 	"github.com/minio/minio-go/v7"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 )
 
-// ExportAttachments exports the attachments.
-func ExportAttachments(extensions []string, project Project) (string, error) {
-	attachments, err := GetAllAttachments(project)
+// ExportAttachmentsByProject exports the attachments.
+// Use "*" as the extensions to export all attachments.
+func ExportAttachmentsByProject(extensions []string, projectUUID string) (string, error) {
+	attachments, err := GetAllAttachments(projectUUID)
 
 	if err != nil {
 		return "", err
 	}
 
 	exportUUID := NewUUID()
-	exportDirectory := fmt.Sprintf("%s/%s", GetProjectTempDirectory(project), exportUUID)
+	exportDirectory := fmt.Sprintf("%s/%s", GetProjectTempDirectory(projectUUID), exportUUID)
 
 	err = os.Mkdir(exportDirectory, 0755)
 
@@ -29,7 +30,7 @@ func ExportAttachments(extensions []string, project Project) (string, error) {
 		return "", err
 	}
 
-	// Write the attachments to the export directory.
+	// Write the attachments to the temp export directory.
 	for _, attachment := range attachments {
 		hasExtension := false
 
@@ -37,7 +38,7 @@ func ExportAttachments(extensions []string, project Project) (string, error) {
 			if extension == "*" {
 				hasExtension = true
 				break
-			} else if strings.HasSuffix(attachment.Name, extension) {
+			} else if filepath.Ext(attachment.Name) == extension {
 				hasExtension = true
 				break
 			}
@@ -47,14 +48,15 @@ func ExportAttachments(extensions []string, project Project) (string, error) {
 			err := MinIOClient.FGetObject(
 				context.Background(),
 				MinIOBucketName,
-				fmt.Sprintf("%s/%s/%s", project.UserUUID, project.UUID, attachment.UUID),
-				fmt.Sprintf("%s/%s-%s%s", exportDirectory, strings.TrimSuffix(attachment.Name, path.Ext(attachment.Name)), attachment.UUID, path.Ext(attachment.Name)),
+				fmt.Sprintf("%s/%s", projectUUID, attachment.UUID),
+				fmt.Sprintf("%s/%s-%s%s", exportDirectory, strings.TrimSuffix(attachment.Name, filepath.Ext(attachment.Name)), attachment.UUID, filepath.Ext(attachment.Name)),
 				minio.GetObjectOptions{},
 			)
 
 			if err != nil {
 				if err.Error() == "The specified key does not exist." {
-					Logger.Warnf("Failed to export attachment: %s", err)
+					// One of the parsers didn't upload the attachment to MinIO.
+					Logger.Warnf("Failed to export attachment (%s - %s): %s", attachment.UUID, attachment.Name, err)
 					continue
 				} else {
 					return "", err
@@ -64,20 +66,18 @@ func ExportAttachments(extensions []string, project Project) (string, error) {
 	}
 
 	// ZIP the directory.
-	err = ZipDirectory(exportDirectory, fmt.Sprintf("%s/%s.zip", GetProjectTempDirectory(project), exportUUID))
+	err = ZipDirectory(exportDirectory, fmt.Sprintf("%s/%s.zip", GetProjectTempDirectory(projectUUID), exportUUID))
 
 	if err != nil {
 		return "", err
 	}
 
 	// Upload the ZIP file to MinIO.
-	_, err = UploadFile(fmt.Sprintf("%s.zip", exportUUID), fmt.Sprintf("%s/%s.zip", GetProjectTempDirectory(project), exportUUID), project)
+	uploadedFilePath, err := UploadFile(fmt.Sprintf("%s.zip", exportUUID), fmt.Sprintf("%s/%s.zip", GetProjectTempDirectory(projectUUID), exportUUID), projectUUID)
 
 	if err != nil {
 		return "", err
 	}
 
-	Logger.Infof("Done exporting attachments.")
-
-	return fmt.Sprintf("%s/%s/%s.zip", project.UserUUID, project.UUID, exportUUID), nil
+	return uploadedFilePath, nil
 }

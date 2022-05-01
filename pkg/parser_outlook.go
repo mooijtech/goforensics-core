@@ -109,7 +109,7 @@ func parseMailboxes(outlookClient *client.Client, mailboxNames []string, project
 
 		var kafkaMessages []kafka.Message
 
-		totalIndexedMessages := 0
+		totalSentMessages := 0
 
 		for imapMessage := range messages {
 			message := parseIMAPMessage(imapMessage, project)
@@ -120,7 +120,7 @@ func parseMailboxes(outlookClient *client.Client, mailboxNames []string, project
 			})
 
 			if len(kafkaMessages) >= 100 {
-				totalIndexedMessages += len(kafkaMessages)
+				totalSentMessages += len(kafkaMessages)
 
 				err := KafkaWriter.WriteMessages(context.Background(), kafkaMessages...)
 
@@ -128,7 +128,7 @@ func parseMailboxes(outlookClient *client.Client, mailboxNames []string, project
 					return err
 				}
 
-				*progressPercentageChannel <- int((float64(totalIndexedMessages) / float64(mbox.Messages)) * float64(100))
+				*progressPercentageChannel <- int((float64(totalSentMessages) / float64(mbox.Messages)) * float64(100))
 
 				kafkaMessages = []kafka.Message{}
 			}
@@ -164,7 +164,6 @@ func parseMailboxes(outlookClient *client.Client, mailboxNames []string, project
 func parseIMAPMessage(message *imap.Message, project Project) Message {
 	return Message{
 		UUID:        NewUUID(),
-		UserUUID:    project.UserUUID,
 		ProjectUUID: project.UUID,
 		MessageID:   message.Envelope.MessageId,
 		Subject:     message.Envelope.Subject,

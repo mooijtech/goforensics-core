@@ -5,7 +5,6 @@ package core
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -14,10 +13,10 @@ import (
 	"strconv"
 )
 
-// Variable defining our MinIO client.
+// Variables defining our MinIO client.
 var (
-	MinIOClient     *minio.Client
 	MinIOBucketName string
+	MinIOClient     *minio.Client
 )
 
 // init initializes our MinIO client.
@@ -25,42 +24,31 @@ func init() {
 	MinIOBucketName = os.Getenv("MINIO_BUCKET")
 
 	if MinIOBucketName == "" {
-		Logger.Fatal("Failed to get MinIO client: unset MINIO_BUCKET environment variable")
+		Logger.Fatal("unset MINIO_BUCKET environment variable")
 	}
 
-	client, err := newMinIOClient()
-
-	if err != nil {
-		Logger.Fatalf("Failed to get MinIO client: %s", err)
-	}
-
-	MinIOClient = client
-}
-
-// newMinIOClient returns the MinIO client.
-func newMinIOClient() (*minio.Client, error) {
 	endpoint := os.Getenv("MINIO_ENDPOINT")
 
 	if endpoint == "" {
-		return nil, errors.New("unset MINIO_ENDPOINT environment variable")
+		Logger.Fatal("unset MINIO_ENDPOINT environment variable")
 	}
 
 	accessKey := os.Getenv("MINIO_ACCESS_KEY")
 
 	if accessKey == "" {
-		return nil, errors.New("unset MINIO_ ACCESS_KEY environment variable")
+		Logger.Fatal("unset MINIO_ACCESS_KEY environment variable")
 	}
 
 	secretKey := os.Getenv("MINIO_SECRET_KEY")
 
 	if secretKey == "" {
-		return nil, errors.New("unset MINIO_SECRET_KEY environment variable")
+		Logger.Fatal("unset MINIO_SECRET_KEY environment variable")
 	}
 
 	secure, err := strconv.ParseBool(os.Getenv("MINIO_SECURE"))
 
 	if err != nil {
-		return nil, errors.New("unset MINIO_SECURE environment variable")
+		Logger.Fatal("unset MINIO_SECURE environment variable")
 	}
 
 	minioClient, err := minio.New(endpoint, &minio.Options{
@@ -69,15 +57,15 @@ func newMinIOClient() (*minio.Client, error) {
 	})
 
 	if err != nil {
-		return nil, err
+		Logger.Fatalf("Failed to get MinIO client: %s", err)
 	}
 
-	return minioClient, nil
+	MinIOClient = minioClient
 }
 
 // UploadFile uploads the file to MinIO and returns the MinIO path to the uploaded file.
-func UploadFile(fileName string, filePath string, project Project) (string, error) {
-	objectName := fmt.Sprintf("%s/%s/%s", project.UserUUID, project.UUID, fileName)
+func UploadFile(fileName string, filePath string, projectUUID string) (string, error) {
+	objectName := fmt.Sprintf("%s/%s", projectUUID, fileName)
 	contentType := "application/octet-stream"
 
 	_, err := MinIOClient.FPutObject(context.Background(), MinIOBucketName, objectName, filePath, minio.PutObjectOptions{ContentType: contentType})

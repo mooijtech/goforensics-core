@@ -29,14 +29,14 @@ type Network struct {
 }
 
 // GetNetwork returns the network of nodes (contacts) and links.
-func GetNetwork(project Project) (Network, error) {
+func GetNetwork(projectUUID string) (Network, error) {
 	// Address X sent to address Y, Z amount of times
 	sentMap := map[string]map[string]int{}
 
 	var firstSentMessageDate int
 	var lastSentMessageDate int
 
-	allMessages, err := GetAllMessages(project)
+	allMessages, err := GetAllMessages(projectUUID)
 
 	if err != nil {
 		return Network{}, err

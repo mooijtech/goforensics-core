@@ -8,6 +8,7 @@ import (
 	"fmt"
 	_ "github.com/emersion/go-message/charset"
 	"github.com/emersion/go-message/mail"
+	"github.com/jackc/pgx/v4"
 	"github.com/segmentio/kafka-go"
 	"golang.org/x/sync/errgroup"
 	"io"
@@ -35,12 +36,12 @@ func (parser EMLParser) GetSupportedFileExtensions() []string {
 }
 
 // Parse parses the PST file.
-func (parser EMLParser) Parse(evidence *Evidence, project Project) error {
+func (parser EMLParser) Parse(evidence *Evidence, project Project, database *pgx.Conn) error {
 	errorGroup, _ := errgroup.WithContext(context.Background())
 
 	errorGroup.Go(func() error {
 		unzippedUUID := NewUUID()
-		unzippedDirectory := fmt.Sprintf("%s/%s", GetProjectTempDirectory(project), unzippedUUID)
+		unzippedDirectory := fmt.Sprintf("%s/%s", GetProjectTempDirectory(project.UUID), unzippedUUID)
 
 		err := os.Mkdir(unzippedDirectory, 0755)
 
@@ -58,12 +59,13 @@ func (parser EMLParser) Parse(evidence *Evidence, project Project) error {
 		// Create our root tree node for EML files.
 		rootTreeNode := TreeNode{
 			FolderUUID:   NewUUID(),
+			ProjectUUID:  project.UUID,
 			EvidenceUUID: evidence.UUID,
 			Title:        strings.Split(evidence.FileName, "-")[1],
 			Parent:       "NULL",
 		}
 
-		if err := rootTreeNode.Save(project); err != nil {
+		if err := rootTreeNode.Save(database); err != nil {
 			Logger.Errorf("Failed to save tree node to database: %s", err)
 			return err
 		}
@@ -197,7 +199,7 @@ func parseEMLFile(path string, project Project, rootTreeNode TreeNode) (Message,
 
 			if !foundDateFormat {
 				Logger.Warnf("Failed to parse data format: %s", fields.Value())
-				message.Received = -1
+				message.Received = 0
 			}
 		}
 
@@ -237,19 +239,19 @@ func parseEMLFile(path string, project Project, rootTreeNode TreeNode) (Message,
 					return Message{}, nil
 				}
 
-				err = ioutil.WriteFile(fmt.Sprintf("%s/%s", GetProjectTempDirectory(project), attachment.UUID), body, 0755)
+				err = ioutil.WriteFile(fmt.Sprintf("%s/%s", GetProjectTempDirectory(project.UUID), attachment.UUID), body, 0755)
 
 				if err != nil {
 					return Message{}, err
 				}
 
-				_, err = UploadFile(attachment.UUID, fmt.Sprintf("%s/%s", GetProjectTempDirectory(project), attachment.UUID), project)
+				_, err = UploadFile(attachment.UUID, fmt.Sprintf("%s/%s", GetProjectTempDirectory(project.UUID), attachment.UUID), project.UUID)
 
 				if err != nil {
 					return Message{}, err
 				}
 
-				err = os.Remove(fmt.Sprintf("%s/%s", GetProjectTempDirectory(project), attachment.UUID))
+				err = os.Remove(fmt.Sprintf("%s/%s", GetProjectTempDirectory(project.UUID), attachment.UUID))
 
 				if err != nil {
 					return Message{}, err
@@ -282,7 +284,6 @@ func parseEMLFile(path string, project Project, rootTreeNode TreeNode) (Message,
 	}
 
 	message.UUID = NewUUID()
-	message.UserUUID = project.UserUUID
 	message.ProjectUUID = project.UUID
 	message.FolderUUID = rootTreeNode.FolderUUID
 	message.Headers = headerBuilder.String()

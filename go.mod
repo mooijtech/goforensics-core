@@ -3,7 +3,6 @@ module github.com/mooijtech/goforensics-core
 go 1.16
 
 require (
-	github.com/mattn/go-sqlite3 v1.14.9
 	github.com/minio/minio-go/v7 v7.0.15
 	github.com/segmentio/ksuid v1.0.4
 	github.com/sirupsen/logrus v1.8.1
@@ -17,6 +16,7 @@ require (
 	github.com/emersion/go-imap v1.2.0
 	github.com/emersion/go-message v0.15.0
 	github.com/emersion/go-sasl v0.0.0-20211008083017-0b9dcfb154ac
+	github.com/jackc/pgx/v4 v4.16.0
 	github.com/mattevans/postmark-go v0.1.5
 	github.com/mooijtech/go-pst/v3 v3.2.1
 	github.com/ory/kratos-client-go v0.9.0-alpha.3

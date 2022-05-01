@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/aquasecurity/esquery"
+	"github.com/jackc/pgx/v4"
 	"io"
 	"strings"
 )
@@ -15,7 +16,6 @@ import (
 // Message represents a message.
 type Message struct {
 	UUID         string       `json:"uuid"`
-	UserUUID     string       `json:"user_uuid"`
 	ProjectUUID  string       `json:"project_uuid"`
 	MessageID    string       `json:"message_id"`
 	Subject      string       `json:"subject"`
@@ -27,6 +27,9 @@ type Message struct {
 	Body         string       `json:"body"`
 	Headers      string       `json:"headers"`
 	Attachments  []Attachment `json:"attachments"`
+	IsBookmarked bool         `json:"is_bookmarked,omitempty"`
+	Tag          string       `json:"tag,omitempty"`
+	Comment      string       `json:"comment,omitempty"`
 	FolderUUID   string       `json:"folder_uuid"`
 	EvidenceUUID string       `json:"evidence_uuid"`
 }
@@ -83,7 +86,7 @@ var (
 )
 
 // GetMessagesFromQuery returns all messages from the specified search query.
-func GetMessagesFromQuery(query string, project Project) ([]Message, error) {
+func GetMessagesFromQuery(query string, projectUUID string, database *pgx.Conn) ([]Message, error) {
 	var shouldMatch []esquery.Mappable
 
 	for _, field := range AllMessageFields {
@@ -94,8 +97,7 @@ func GetMessagesFromQuery(query string, project Project) ([]Message, error) {
 		Query(
 			esquery.
 				Bool().
-				Must(esquery.Term("user_uuid", project.UserUUID)).
-				Must(esquery.Term("project_uuid", project.UUID)).
+				Must(esquery.Term("project_uuid", projectUUID)).
 				MinimumShouldMatch(1).
 				Should(shouldMatch...),
 		).
@@ -110,12 +112,11 @@ func GetMessagesFromQuery(query string, project Project) ([]Message, error) {
 		return nil, err
 	}
 
-	return getMessagesFromSearchResult(response.Body)
+	return getMessagesFromSearchResult(response.Body, database)
 }
 
 // GetMessagesFromFolders returns the messages in the specified folders.
-// isMessageContents may be true to only return the contents of the message (used when selecting a folder).
-func GetMessagesFromFolders(folderUUIDs []string, project Project) ([]Message, error) {
+func GetMessagesFromFolders(folderUUIDs []string, projectUUID string, database *pgx.Conn) ([]Message, error) {
 	var shouldTerms []esquery.Mappable
 
 	for _, folderUUID := range folderUUIDs {
@@ -126,8 +127,7 @@ func GetMessagesFromFolders(folderUUIDs []string, project Project) ([]Message, e
 		Query(
 			esquery.
 				Bool().
-				Must(esquery.Term("user_uuid", project.UserUUID)).
-				Must(esquery.Term("project_uuid", project.UUID)).
+				Must(esquery.Term("project_uuid", projectUUID)).
 				MinimumShouldMatch(1).
 				Should(shouldTerms...),
 		).
@@ -142,17 +142,16 @@ func GetMessagesFromFolders(folderUUIDs []string, project Project) ([]Message, e
 		return nil, err
 	}
 
-	return getMessagesFromSearchResult(response.Body)
+	return getMessagesFromSearchResult(response.Body, database)
 }
 
 // GetMessageByUUID returns the message with the specified UUID.
-func GetMessageByUUID(messageUUID string, project Project) (Message, error) {
+func GetMessageByUUID(messageUUID string, projectUUID string, database *pgx.Conn) (Message, error) {
 	response, err := esquery.Search().
 		Query(
 			esquery.
 				Bool().
-				Must(esquery.Term("user_uuid", project.UserUUID)).
-				Must(esquery.Term("project_uuid", project.UUID)).
+				Must(esquery.Term("project_uuid", projectUUID)).
 				Must(esquery.Term("uuid", messageUUID)),
 		).
 		Size(1).
@@ -166,7 +165,7 @@ func GetMessageByUUID(messageUUID string, project Project) (Message, error) {
 		return Message{}, err
 	}
 
-	messages, err := getMessagesFromSearchResult(response.Body)
+	messages, err := getMessagesFromSearchResult(response.Body, database)
 
 	if err != nil {
 		return Message{}, err
@@ -180,13 +179,12 @@ func GetMessageByUUID(messageUUID string, project Project) (Message, error) {
 }
 
 // GetAllMessages returns a list of all messages from the specified project.
-func GetAllMessages(project Project) ([]Message, error) {
+func GetAllMessages(projectUUID string, database *pgx.Conn) ([]Message, error) {
 	response, err := esquery.Search().
 		Query(
 			esquery.
 				Bool().
-				Must(esquery.Term("user_uuid", project.UserUUID)).
-				Must(esquery.Term("project_uuid", project.UUID)),
+				Must(esquery.Term("project_uuid", projectUUID)),
 		).
 		Size(10000).
 		Run(
@@ -199,17 +197,16 @@ func GetAllMessages(project Project) ([]Message, error) {
 		return nil, err
 	}
 
-	return getMessagesFromSearchResult(response.Body)
+	return getMessagesFromSearchResult(response.Body, database)
 }
 
 // GetMessagesFromField returns all messages from the specified query and field.
-func GetMessagesFromField(query string, field string, project Project) ([]Message, error) {
+func GetMessagesFromField(query string, field string, projectUUID string, database *pgx.Conn) ([]Message, error) {
 	response, err := esquery.Search().
 		Query(
 			esquery.
 				Bool().
-				Must(esquery.Term("user_uuid", project.UserUUID)).
-				Must(esquery.Term("project_uuid", project.UUID)).
+				Must(esquery.Term("project_uuid", projectUUID)).
 				Must(esquery.Match(field, query)),
 		).
 		Size(10000).
@@ -223,11 +220,11 @@ func GetMessagesFromField(query string, field string, project Project) ([]Messag
 		return nil, err
 	}
 
-	return getMessagesFromSearchResult(response.Body)
+	return getMessagesFromSearchResult(response.Body, database)
 }
 
 // getMessagesFromSearchResult returns the messages from the search response.
-func getMessagesFromSearchResult(responseBody io.ReadCloser) ([]Message, error) {
+func getMessagesFromSearchResult(responseBody io.ReadCloser, database *pgx.Conn) ([]Message, error) {
 	var responseMap map[string]interface{}
 
 	if err := json.NewDecoder(responseBody).Decode(&responseMap); err != nil {
@@ -245,129 +242,34 @@ func getMessagesFromSearchResult(responseBody io.ReadCloser) ([]Message, error) 
 	var messages []Message
 
 	for _, hit := range responseMap["hits"].(map[string]interface{})["hits"].([]interface{}) {
+		var message Message
+
 		hitFields := hit.(map[string]interface{})["_source"].(map[string]interface{})
+		hitBytes, err := json.Marshal(hitFields)
 
-		uuid := hitFields["uuid"].(string)
-
-		userUUID, ok := hitFields["user_uuid"].(string)
-
-		if !ok {
-			Logger.Errorf("Failed to get user UUID from search result.")
-			continue
+		if err != nil {
+			return nil, err
 		}
 
-		projectUUID, ok := hitFields["project_uuid"].(string)
+		err = json.Unmarshal(hitBytes, &message)
 
-		if !ok {
-			Logger.Errorf("Failed to get project UUID from search result.")
-			continue
+		if err != nil {
+			return nil, err
 		}
 
-		messageID, ok := hitFields["message_id"].(string)
+		messageMetadata, err := GetMessageMetadata(message.UUID, message.ProjectUUID, database)
 
-		if !ok {
-			messageID = ""
-		}
-
-		subject, ok := hitFields["subject"].(string)
-
-		if !ok {
-			subject = ""
-		}
-
-		from, ok := hitFields["from"].(string)
-
-		if !ok {
-			from = ""
-		}
-
-		to, ok := hitFields["to"].(string)
-
-		if !ok {
-			to = ""
-		}
-
-		cc, ok := hitFields["cc"].(string)
-
-		if !ok {
-			cc = ""
-		}
-
-		received, ok := hitFields["received"].(float64)
-
-		if !ok {
-			received = 0
-		}
-
-		size, ok := hitFields["size"].(string)
-
-		if !ok {
-			size = ""
-		}
-
-		body, ok := hitFields["body"].(string)
-
-		if !ok {
-			body = ""
-		}
-
-		headers, ok := hitFields["headers"].(string)
-
-		if !ok {
-			headers = ""
-		}
-
-		folderUUID, ok := hitFields["folder_uuid"].(string)
-
-		if !ok {
-			Logger.Errorf("Failed to get folderUUID field.")
-		}
-
-		evidenceUUID, ok := hitFields["evidence_uuid"].(string)
-
-		if !ok {
-			Logger.Errorf("Failed to get evidenceUUID field.")
-		}
-
-		var attachments []Attachment
-
-		attachmentsMap, ok := hitFields["attachments"].([]interface{})
-
-		if ok {
-			attachmentsMapBytes, err := json.Marshal(attachmentsMap)
-
-			if err != nil {
-				Logger.Errorf("Failed to marshal attachments map: %s", err)
-			}
-
-			err = json.Unmarshal(attachmentsMapBytes, &attachments)
-
-			if err != nil {
-				Logger.Errorf("Failed to unmarshal attachments map: %s", err)
-			}
+		if err == nil {
+			message.IsBookmarked = messageMetadata.IsBookmarked
+			message.Tag = messageMetadata.Tag
+			message.Comment = messageMetadata.Comment
+		} else if err == pgx.ErrNoRows {
+			// No message metadata.
 		} else {
-			if hitFields["attachments"] != nil {
-				Logger.Errorf("Failed to convert attachments: %s", hitFields["attachments"].([]interface{}))
-			}
+			Logger.Errorf("Failed to get message metadata: %s", err)
 		}
 
-		messages = append(messages, Message{
-			uuid,
-			userUUID,
-			projectUUID,
-			messageID,
-			subject,
-			from,
-			to,
-			cc,
-			int(received),
-			size,
-			body,
-			headers,
-			attachments,
-			folderUUID,
-			evidenceUUID,
-		})
+		messages = append(messages, message)
 	}
 
 	return messages, nil

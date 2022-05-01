@@ -12,7 +12,7 @@ type Attachment struct {
 }
 
 // GetAllAttachments returns all attachments from all messages.
-func GetAllAttachments(project Project) ([]Attachment, error) {
+func GetAllAttachments(projectUUID string) ([]Attachment, error) {
 	// TODO - Implement this.
 	return nil, errors.New("not implemented yet")
 }

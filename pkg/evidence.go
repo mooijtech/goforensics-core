@@ -4,8 +4,10 @@
 package core
 
 import (
+	"context"
 	"errors"
-	"strings"
+	"github.com/jackc/pgx/v4"
+	"path/filepath"
 )
 
 // Evidence represents a PST file.
@@ -17,30 +19,13 @@ type Evidence struct {
 }
 
 // Save saves the evidence to the database.
-func (evidence *Evidence) Save(project Project) error {
-	database, err := GetProjectDatabase(project)
-
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		err = database.Close()
-
-		if err != nil {
-			Logger.Errorf("Failed to close database: %s", err)
-		}
-	}()
-
-	statement, err := database.Prepare("INSERT OR REPLACE INTO evidence(uuid, fileHash, fileName, isParsed) VALUES (?,?,?,?)")
-
-	if err != nil {
-		return err
-	}
-
-	_, err = statement.Exec(evidence.UUID, evidence.FileHash, evidence.FileName, evidence.IsParsed)
-
-	if err != nil {
+// To assign the evidence to a project call AddProjectEvidence.
+func (evidence *Evidence) Save(database *pgx.Conn) error {
+	preparedStatement := `
+	INSERT INTO evidence(uuid, fileHash, fileName, isParsed) VALUES ($1, $2, $3, $4)
+	ON CONFLICT(uuid) DO UPDATE SET isParsed = $4
+	`
+	if _, err := database.Exec(context.Background(), preparedStatement, evidence.UUID, evidence.FileHash, evidence.FileName, evidence.IsParsed); err != nil {
 		return err
 	}
 
@@ -48,7 +33,7 @@ func (evidence *Evidence) Save(project Project) error {
 }
 
 // Parse calls all supported parsers on the file.
-func (evidence *Evidence) Parse(project Project) error {
+func (evidence *Evidence) Parse(project Project, database *pgx.Conn) error {
 	if evidence.IsParsed {
 		return errors.New("evidence is already parsed")
 	}
@@ -59,7 +44,7 @@ func (evidence *Evidence) Parse(project Project) error {
 		supportsExtension := false
 
 		for _, extension := range parser.GetSupportedFileExtensions() {
-			if strings.HasSuffix(evidence.FileName, extension) {
+			if filepath.Ext(evidence.FileName) == extension {
 				supportsExtension = true
 				foundParser = true
 				break
@@ -67,7 +52,7 @@ func (evidence *Evidence) Parse(project Project) error {
 		}
 
 		if supportsExtension {
-			err := parser.Parse(evidence, project)
+			err := parser.Parse(evidence, project, database)
 
 			if err != nil {
 				return err

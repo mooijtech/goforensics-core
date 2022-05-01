@@ -25,15 +25,16 @@ func CreateHTMLReport(messages []Message, project Project) (string, error) {
 		return "", err
 	}
 
-	reportOutputDirectoryUUID := NewUUID()
+	reportUUID := NewUUID()
+	reportOutputDirectory := fmt.Sprintf("%s/%s", GetProjectTempDirectory(project.UUID), reportUUID)
 
-	err = os.Mkdir(fmt.Sprintf("data/%s", reportOutputDirectoryUUID), 0755)
+	err = os.Mkdir(reportOutputDirectory, 0755)
 
 	if err != nil {
 		return "", err
 	}
 
-	reportOutputFile, err := os.Create(fmt.Sprintf("data/%s/report.html", reportOutputDirectoryUUID))
+	reportOutputFile, err := os.Create(fmt.Sprintf("%s/report.html", reportOutputDirectory))
 
 	if err != nil {
 		return "", err
@@ -49,7 +50,7 @@ func CreateHTMLReport(messages []Message, project Project) (string, error) {
 	}
 
 	for _, message := range messages {
-		messageOutputFile, err := os.Create(fmt.Sprintf("data/%s/message-%s.html", reportOutputDirectoryUUID, message.UUID))
+		messageOutputFile, err := os.Create(fmt.Sprintf("%s/message-%s.html", reportOutputDirectory, message.UUID))
 
 		if err != nil {
 			return "", err
@@ -71,23 +72,23 @@ func CreateHTMLReport(messages []Message, project Project) (string, error) {
 		}
 	}
 
-	err = ZipDirectory(fmt.Sprintf("data/%s", reportOutputDirectoryUUID), fmt.Sprintf("data/%s.zip", reportOutputDirectoryUUID))
+	err = ZipDirectory(reportOutputDirectory, fmt.Sprintf("%s/%s.zip", reportOutputDirectory, reportUUID))
 
 	if err != nil {
 		return "", err
 	}
 
-	_, err = UploadFile(fmt.Sprintf("%s.zip", reportOutputDirectoryUUID), fmt.Sprintf("data/%s.zip", reportOutputDirectoryUUID), project)
+	uploadedFilePath, err := UploadFile(fmt.Sprintf("%s.zip", reportUUID), fmt.Sprintf("%s/%s.zip", reportOutputDirectory, reportUUID), project.UUID)
 
 	if err != nil {
 		return "", err
 	}
 
-	err = os.RemoveAll(fmt.Sprintf("data/%s", reportOutputDirectoryUUID))
+	err = os.RemoveAll(reportOutputDirectory)
 
 	if err != nil {
 		return "", err
 	}
 
-	return fmt.Sprintf("%s/%s/%s.zip", project.UserUUID, project.UUID, reportOutputDirectoryUUID), nil
+	return uploadedFilePath, nil
 }

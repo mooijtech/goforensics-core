@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v4"
 	"github.com/mooijtech/go-pst/v3/pkg"
 	"github.com/segmentio/kafka-go"
 	"golang.org/x/sync/errgroup"
@@ -30,7 +31,7 @@ func (parser PSTParser) GetSupportedFileExtensions() []string {
 }
 
 // Parse parses the PST file.
-func (parser PSTParser) Parse(evidence *Evidence, project Project) error {
+func (parser PSTParser) Parse(evidence *Evidence, project Project, database *pgx.Conn) error {
 	errorGroup, _ := errgroup.WithContext(context.Background())
 
 	errorGroup.Go(func() error {
@@ -114,19 +115,20 @@ func (parser PSTParser) Parse(evidence *Evidence, project Project) error {
 
 		rootTreeNode := TreeNode{
 			FolderUUID:   NewUUID(),
+			ProjectUUID:  project.UUID,
 			EvidenceUUID: evidence.UUID,
 			Title:        strings.Split(evidence.FileName, "-")[1],
 			Parent:       "NULL",
 		}
 
-		err = rootTreeNode.Save(project)
+		err = rootTreeNode.Save(database)
 
 		if err != nil {
 			Logger.Errorf("Failed to save tree node: %s", err)
 			return errors.New("failed to save tree node")
 		}
 
-		err = parseSubFolders(pstFile, rootFolder, formatType, encryptionType, project, evidence, rootTreeNode)
+		err = parseSubFolders(pstFile, rootFolder, formatType, encryptionType, project, evidence, database, rootTreeNode)
 
 		if err != nil {
 			Logger.Errorf("Failed to get sub-folders: %s", err)
@@ -135,7 +137,7 @@ func (parser PSTParser) Parse(evidence *Evidence, project Project) error {
 
 		evidence.IsParsed = true
 
-		err = evidence.Save(project)
+		err = evidence.Save(database)
 
 		if err != nil {
 			Logger.Errorf("Failed to save evidence: %s", err)
@@ -151,7 +153,7 @@ func (parser PSTParser) Parse(evidence *Evidence, project Project) error {
 }
 
 // parseSubFolders is a recursive function which parses all sub-folders for the specified folder.
-func parseSubFolders(pstFile pst.File, folder pst.Folder, formatType string, encryptionType string, project Project, evidence *Evidence, treeNode TreeNode) error {
+func parseSubFolders(pstFile pst.File, folder pst.Folder, formatType string, encryptionType string, project Project, evidence *Evidence, database *pgx.Conn, treeNode TreeNode) error {
 	subFolders, err := pstFile.GetSubFolders(folder, formatType, encryptionType)
 
 	if err != nil {
@@ -175,7 +177,7 @@ func parseSubFolders(pstFile pst.File, folder pst.Folder, formatType string, enc
 			Parent:       treeNode.FolderUUID,
 		}
 
-		err = subFolderTreeNode.Save(project)
+		err = subFolderTreeNode.Save(database)
 
 		if err != nil {
 			return err
@@ -201,7 +203,7 @@ func parseSubFolders(pstFile pst.File, folder pst.Folder, formatType string, enc
 
 					if err != nil {
 						Logger.Errorf("Failed to get attachment filename, using default: %s", err)
-						attachmentFilename = "GO_FORENSICS_EMPTY_FILENAME"
+						attachmentFilename = "EMPTY_FILENAME"
 					}
 
 					pstAttachment := Attachment{
@@ -211,21 +213,21 @@ func parseSubFolders(pstFile pst.File, folder pst.Folder, formatType string, enc
 
 					pstAttachments = append(pstAttachments, pstAttachment)
 
-					err = attachment.WriteToFile(fmt.Sprintf("%s/%s", GetProjectTempDirectory(project), pstAttachment.UUID), &pstFile, formatType, encryptionType)
+					err = attachment.WriteToFile(fmt.Sprintf("%s/%s", GetProjectTempDirectory(project.UUID), pstAttachment.UUID), &pstFile, formatType, encryptionType)
 
 					if err != nil {
 						Logger.Errorf("Failed to write attachment to file: %s", err)
 						continue
 					}
 
-					_, err = UploadFile(pstAttachment.UUID, fmt.Sprintf("%s/%s", GetProjectTempDirectory(project), pstAttachment.UUID), project)
+					_, err = UploadFile(pstAttachment.UUID, fmt.Sprintf("%s/%s", GetProjectTempDirectory(project.UUID), pstAttachment.UUID), project.UUID)
 
 					if err != nil {
 						Logger.Errorf("Failed to upload evidence: %s", err)
 						return err
 					}
 
-					err = os.Remove(fmt.Sprintf("%s/%s", GetProjectTempDirectory(project), pstAttachment.UUID))
+					err = os.Remove(fmt.Sprintf("%s/%s", GetProjectTempDirectory(project.UUID), pstAttachment.UUID))
 
 					if err != nil {
 						Logger.Errorf("Failed to remove file: %s", err)
@@ -260,7 +262,7 @@ func parseSubFolders(pstFile pst.File, folder pst.Folder, formatType string, enc
 			}
 		}
 
-		err = parseSubFolders(pstFile, subFolder, formatType, encryptionType, project, evidence, subFolderTreeNode)
+		err = parseSubFolders(pstFile, subFolder, formatType, encryptionType, project, evidence, database, subFolderTreeNode)
 
 		if err != nil {
 			return err
@@ -280,71 +282,49 @@ func createMessage(pstFile pst.File, message pst.Message, project Project, folde
 
 	if err == nil {
 		if messageClass == "IPM.Appointment" {
-			allAttendees, err := message.GetAppointmentAllAttendees(&pstFile, formatType, encryptionType)
-
-			if err == nil {
+			if allAttendees, err := message.GetAppointmentAllAttendees(&pstFile, formatType, encryptionType); err == nil {
 				bodyBuilder.Write([]byte(fmt.Sprintf("All attendees: %s\n", allAttendees)))
 			}
 
-			location, err := message.GetAppointmentLocation(&pstFile, formatType, encryptionType)
-
-			if err == nil {
+			if location, err := message.GetAppointmentLocation(&pstFile, formatType, encryptionType); err == nil {
 				bodyBuilder.Write([]byte(fmt.Sprintf("Location: %s\n", location)))
 			}
 
-			startTime, err := message.GetAppointmentStartTime(&pstFile)
-
-			if err == nil {
+			if startTime, err := message.GetAppointmentStartTime(&pstFile); err == nil {
 				bodyBuilder.Write([]byte(fmt.Sprintf("Start time: %s\n", startTime.String())))
 			}
 
-			endTime, err := message.GetAppointmentEndTime(&pstFile)
-
-			if err == nil {
+			if endTime, err := message.GetAppointmentEndTime(&pstFile); err == nil {
 				bodyBuilder.Write([]byte(fmt.Sprintf("End time: %s\n", endTime.String())))
 			}
 		} else if messageClass == "IPM.Contact" {
-			givenName, err := message.GetContactGivenName(&pstFile, formatType, encryptionType)
-
-			if err == nil {
+			if givenName, err := message.GetContactGivenName(&pstFile, formatType, encryptionType); err == nil {
 				bodyBuilder.Write([]byte(fmt.Sprintf("Given name: %s\n", givenName)))
 			}
 
-			emailDisplayName, err := message.GetContactEmailDisplayName(&pstFile, formatType, encryptionType)
-
-			if err == nil {
+			if emailDisplayName, err := message.GetContactEmailDisplayName(&pstFile, formatType, encryptionType); err == nil {
 				bodyBuilder.Write([]byte(fmt.Sprintf("Email display name: %s\n", emailDisplayName)))
 			}
 
-			companyName, err := message.GetContactCompanyName(&pstFile, formatType, encryptionType)
-
-			if err == nil {
+			if companyName, err := message.GetContactCompanyName(&pstFile, formatType, encryptionType); err == nil {
 				bodyBuilder.Write([]byte(fmt.Sprintf("Company name: %s\n", companyName)))
 			}
 
-			businessPhoneNumber, err := message.GetContactBusinessPhoneNumber(&pstFile, formatType, encryptionType)
-
-			if err == nil {
+			if businessPhoneNumber, err := message.GetContactBusinessPhoneNumber(&pstFile, formatType, encryptionType); err == nil {
 				bodyBuilder.Write([]byte(fmt.Sprintf("Business phone number: %s\n", businessPhoneNumber)))
 			}
 
-			mobilePhoneNumber, err := message.GetContactMobilePhoneNumber(&pstFile, formatType, encryptionType)
-
-			if err == nil {
+			if mobilePhoneNumber, err := message.GetContactMobilePhoneNumber(&pstFile, formatType, encryptionType); err == nil {
 				bodyBuilder.Write([]byte(fmt.Sprintf("Mobile phone number: %s\n", mobilePhoneNumber)))
 			}
 		}
 	}
 
-	bodyHTML, err := message.GetBodyHTML(&pstFile, formatType, encryptionType)
-
-	if err == nil {
+	if bodyHTML, err := message.GetBodyHTML(&pstFile, formatType, encryptionType); err == nil {
 		bodyBuilder.Write([]byte("\n"))
 		bodyBuilder.Write([]byte(bodyHTML))
 	} else {
-		body, err := message.GetBody(&pstFile, formatType, encryptionType)
-
-		if err == nil {
+		if body, err := message.GetBody(&pstFile, formatType, encryptionType); err == nil {
 			bodyBuilder.Write([]byte("\n"))
 			bodyBuilder.Write([]byte(body))
 		}
@@ -352,33 +332,23 @@ func createMessage(pstFile pst.File, message pst.Message, project Project, folde
 
 	pstMessage.Body = bodyBuilder.String()
 
-	subject, err := message.GetSubject(&pstFile, formatType, encryptionType)
-
-	if err == nil {
+	if subject, err := message.GetSubject(&pstFile, formatType, encryptionType); err == nil {
 		pstMessage.Subject = subject
 	}
 
-	from, err := message.GetFrom(&pstFile, formatType, encryptionType)
-
-	if err == nil {
+	if from, err := message.GetFrom(&pstFile, formatType, encryptionType); err == nil {
 		pstMessage.From = from
 	}
 
-	to, err := message.GetTo(&pstFile, formatType, encryptionType)
-
-	if err == nil {
+	if to, err := message.GetTo(&pstFile, formatType, encryptionType); err == nil {
 		pstMessage.To = to
 	}
 
-	cc, err := message.GetCC(&pstFile, formatType, encryptionType)
-
-	if err == nil {
+	if cc, err := message.GetCC(&pstFile, formatType, encryptionType); err == nil {
 		pstMessage.CC = cc
 	}
 
-	received, err := message.GetReceivedDate()
-
-	if err == nil {
+	if received, err := message.GetReceivedDate(); err == nil {
 		pstMessage.Received = int(received.Unix())
 
 		if pstMessage.Received < 0 {
@@ -390,14 +360,11 @@ func createMessage(pstFile pst.File, message pst.Message, project Project, folde
 		pstMessage.Received = 0
 	}
 
-	headers, err := message.GetHeaders(&pstFile, formatType, encryptionType)
-
-	if err == nil {
+	if headers, err := message.GetHeaders(&pstFile, formatType, encryptionType); err == nil {
 		pstMessage.Headers = headers
 	}
 
 	pstMessage.UUID = NewUUID()
-	pstMessage.UserUUID = project.UserUUID
 	pstMessage.ProjectUUID = project.UUID
 	pstMessage.Attachments = attachments
 	pstMessage.FolderUUID = folderUUID
