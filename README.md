@@ -12,6 +12,12 @@
 
 The core of [Go Forensics](https://www.goforensics.io/)
 
+### PostgreSQL
+
+The core uses [PostgreSQL](https://www.postgresql.org/) as its database.
+
+[Installation](https://wiki.archlinux.org/title/PostgreSQL)
+
 ### Kafka
 
 The core sends all messages to [Kafka](https://kafka.apache.org/).
@@ -45,7 +51,6 @@ $ ./bin/elasticsearch
 ### Libraries
 
 - [logrus](https://github.com/sirupsen/logrus)
-- [go-sqlite3](https://github.com/mattn/go-sqlite3)
 - [bcrypt](https://pkg.go.dev/golang.org/x/crypto/bcrypt)
 - [ksuid](https://github.com/segmentio/ksuid)
 - [go-elasticsearch](https://github.com/elastic/go-elasticsearch)
@@ -57,3 +62,4 @@ $ ./bin/elasticsearch
 - [postmark-go](https://github.com/mattevans/postmark-go)
 - [kratos-client-go](https://github.com/ory/kratos-client-go)
 - [go-sasl](https://github.com/emersion/go-sasl)
+- [pgx](https://github.com/jackc/pgx)
