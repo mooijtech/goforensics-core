@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v4"
-	"github.com/mooijtech/go-pst/v3/pkg"
+	"github.com/mooijtech/go-pst/v4/pkg"
 	"github.com/segmentio/kafka-go"
 	"golang.org/x/sync/errgroup"
 	"os"
