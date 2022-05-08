@@ -40,17 +40,34 @@ func (parser EMLParser) Parse(evidence *Evidence, project Project, database *pgx
 	errorGroup, _ := errgroup.WithContext(context.Background())
 
 	errorGroup.Go(func() error {
+		evidencePath, err := DownloadEvidence(*evidence, project.UUID)
+
+		if err != nil {
+			Logger.Errorf("Failed to download evidence: %s", err)
+			return err
+		}
+
 		unzippedUUID := NewUUID()
 		unzippedDirectory := fmt.Sprintf("%s/%s", GetProjectTempDirectory(project.UUID), unzippedUUID)
 
-		err := os.Mkdir(unzippedDirectory, 0755)
+		err = os.Mkdir(unzippedDirectory, 0755)
 
 		if err != nil {
 			return err
 		}
 
+		defer func() {
+			if err := os.Remove(evidencePath); err != nil {
+				Logger.Errorf("Failed to cleanup evidence file: %s", err)
+			}
+
+			if err := os.RemoveAll(unzippedUUID); err != nil {
+				Logger.Errorf("Failed to cleanup evidence: %s", err)
+			}
+		}()
+
 		// Unzip the evidence.
-		err = Unzip(fmt.Sprintf("data/%s/%s", MinIOBucketName, evidence.FileHash), unzippedDirectory)
+		err = Unzip(evidencePath, unzippedDirectory)
 
 		if err != nil {
 			return err

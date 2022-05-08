@@ -83,3 +83,12 @@ func WriteFileToWriter(objectName string, writer io.Writer) error {
 
 	return nil
 }
+
+// DownloadEvidence downloads the evidence from MinIO to the project temp directory and returns its path.
+func DownloadEvidence(evidence Evidence, projectUUID string) (string, error) {
+	evidencePath := fmt.Sprintf(GetProjectTempDirectory(projectUUID) + "/" + evidence.UUID)
+
+	_, err := MinIOClient.FPutObject(context.Background(), MinIOBucketName, evidence.FileHash, evidencePath, minio.PutObjectOptions{})
+
+	return evidencePath, err
+}

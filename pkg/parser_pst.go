@@ -35,7 +35,14 @@ func (parser PSTParser) Parse(evidence *Evidence, project Project, database *pgx
 	errorGroup, _ := errgroup.WithContext(context.Background())
 
 	errorGroup.Go(func() error {
-		pstFile, err := pst.NewFromFile(fmt.Sprintf("data/%s/%s", MinIOBucketName, evidence.FileHash))
+		evidencePath, err := DownloadEvidence(*evidence, project.UUID)
+
+		if err != nil {
+			Logger.Errorf("Failed to download evidence: %s", err)
+			return err
+		}
+
+		pstFile, err := pst.NewFromFile(evidencePath)
 
 		if err != nil {
 			Logger.Errorf("Failed to create new PST file: %s", err)
@@ -43,10 +50,12 @@ func (parser PSTParser) Parse(evidence *Evidence, project Project, database *pgx
 		}
 
 		defer func() {
-			err := pstFile.Close()
-
-			if err != nil {
+			if err := pstFile.Close(); err != nil {
 				Logger.Errorf("Failed to close PST file: %s", err)
+			}
+
+			if err := os.Remove(evidencePath); err != nil {
+				Logger.Errorf("Failed to cleanup evidence file: %s", err)
 			}
 		}()
 
