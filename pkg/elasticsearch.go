@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/elastic/go-elasticsearch/v7"
+	"github.com/spf13/viper"
 	"time"
 )
 
@@ -15,8 +16,12 @@ var Elasticsearch *elasticsearch.Client
 
 // init initializes our Elasticsearch client.
 func init() {
+	if !viper.IsSet("elasticsearch_addresses") {
+		Logger.Fatal("unset elasticsearch_addresses configuration variable")
+	}
+
 	elasticSearch, err := elasticsearch.NewClient(elasticsearch.Config{
-		Addresses:     []string{"http://127.0.0.1:9200"},
+		Addresses:     viper.GetStringSlice("elasticsearch_addresses"),
 		RetryOnStatus: []int{502, 503, 504, 429},
 		RetryBackoff: func(i int) time.Duration {
 			return time.Duration(i) * 100 * time.Millisecond
@@ -25,20 +30,22 @@ func init() {
 	})
 
 	if err != nil {
-		Logger.Fatalf("Failed to initialize ElasticSearch client: %s", err)
+		Logger.Fatalf("Failed to initialize Elasticsearch client: %s", err)
 	}
 
 	Elasticsearch = elasticSearch
 
-	err = createMessagesIndex()
-
-	if err != nil {
+	if err := createMessagesIndex(); err != nil {
 		Logger.Fatalf("Failed to create message mapping: %s", err)
 	}
 }
 
 // createMessageMapping creates our Elasticsearch index mapping.
 func createMessagesIndex() error {
+	if !viper.IsSet("elasticsearch_index") {
+		Logger.Fatal("unset elasticsearch_index configuration variable")
+	}
+
 	var requestBody bytes.Buffer
 
 	err := json.NewEncoder(&requestBody).Encode(map[string]interface{}{
@@ -107,7 +114,7 @@ func createMessagesIndex() error {
 		return err
 	}
 
-	_, err = Elasticsearch.Indices.Create("messages", Elasticsearch.Indices.Create.WithBody(&requestBody))
+	_, err = Elasticsearch.Indices.Create(viper.GetString("elasticsearch_index"), Elasticsearch.Indices.Create.WithBody(&requestBody))
 
 	if err != nil {
 		return err

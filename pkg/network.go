@@ -5,6 +5,7 @@ package core
 
 import (
 	"github.com/emersion/go-message/mail"
+	"github.com/jackc/pgx/v4"
 	"strings"
 )
 
@@ -29,14 +30,14 @@ type Network struct {
 }
 
 // GetNetwork returns the network of nodes (contacts) and links.
-func GetNetwork(projectUUID string) (Network, error) {
+func GetNetwork(projectUUID string, database *pgx.Conn) (Network, error) {
 	// Address X sent to address Y, Z amount of times
 	sentMap := map[string]map[string]int{}
 
 	var firstSentMessageDate int
 	var lastSentMessageDate int
 
-	allMessages, err := GetAllMessages(projectUUID)
+	allMessages, err := GetAllMessages(projectUUID, database)
 
 	if err != nil {
 		return Network{}, err

@@ -62,7 +62,7 @@ func GetBookmarksByProject(projectUUID string, database *pgx.Conn) ([]Message, e
 		}
 
 		if messageMetadata.IsBookmarked {
-			message, err := GetMessageByUUID(messageMetadata.MessageUUID, projectUUID)
+			message, err := GetMessageByUUID(messageMetadata.MessageUUID, projectUUID, database)
 
 			if err != nil {
 				return nil, err

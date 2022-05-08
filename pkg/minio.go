@@ -8,9 +8,8 @@ import (
 	"fmt"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/spf13/viper"
 	"io"
-	"os"
-	"strconv"
 )
 
 // Variables defining our MinIO client.
@@ -21,39 +20,17 @@ var (
 
 // init initializes our MinIO client.
 func init() {
-	MinIOBucketName = os.Getenv("MINIO_BUCKET")
+	minioConfigurationVariables := []string{"minio_bucket", "minio_endpoint", "minio_access_key", "minio_secret_key", "minio_secure"}
 
-	if MinIOBucketName == "" {
-		Logger.Fatal("unset MINIO_BUCKET environment variable")
+	for _, configurationVariable := range minioConfigurationVariables {
+		if !viper.IsSet(configurationVariable) {
+			Logger.Fatalf("unset %s configuration variable", configurationVariable)
+		}
 	}
 
-	endpoint := os.Getenv("MINIO_ENDPOINT")
-
-	if endpoint == "" {
-		Logger.Fatal("unset MINIO_ENDPOINT environment variable")
-	}
-
-	accessKey := os.Getenv("MINIO_ACCESS_KEY")
-
-	if accessKey == "" {
-		Logger.Fatal("unset MINIO_ACCESS_KEY environment variable")
-	}
-
-	secretKey := os.Getenv("MINIO_SECRET_KEY")
-
-	if secretKey == "" {
-		Logger.Fatal("unset MINIO_SECRET_KEY environment variable")
-	}
-
-	secure, err := strconv.ParseBool(os.Getenv("MINIO_SECURE"))
-
-	if err != nil {
-		Logger.Fatal("unset MINIO_SECURE environment variable")
-	}
-
-	minioClient, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
-		Secure: secure,
+	minioClient, err := minio.New(viper.GetString("minio_endpoint"), &minio.Options{
+		Creds:  credentials.NewStaticV4(viper.GetString("minio_access_key"), viper.GetString("minio_secret_key"), ""),
+		Secure: viper.GetBool("minio_secure"),
 	})
 
 	if err != nil {
@@ -61,6 +38,7 @@ func init() {
 	}
 
 	MinIOClient = minioClient
+	MinIOBucketName = viper.GetString("minio_bucket")
 }
 
 // UploadFile uploads the file to MinIO and returns the MinIO path to the uploaded file.

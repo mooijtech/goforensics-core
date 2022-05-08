@@ -41,7 +41,7 @@ func (message *Message) JSON() string {
 	var outputString strings.Builder
 
 	if err := json.NewEncoder(&outputString).Encode(message); err != nil {
-		Logger.Errorf("Failed to encode message.")
+		Logger.Errorf("Failed to encode message: %s", err)
 		return ""
 	}
 

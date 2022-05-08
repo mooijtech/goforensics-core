@@ -19,7 +19,7 @@ type Project struct {
 // Save saves the project to the database.
 func (project *Project) Save(database *pgx.Conn) error {
 	preparedStatement := `
-	INSERT INTO project(uuid, name, creationDate) VALUES ($1,$2,$3)
+	INSERT INTO project(uuid, name, creationDate) VALUES ($1, $2, $3)
 	`
 	_, err := database.Exec(context.Background(), preparedStatement, project.UUID, project.Name, project.CreationDate)
 

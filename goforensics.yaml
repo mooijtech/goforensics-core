@@ -1,0 +1,15 @@
+go_forensics_api_url: http://localhost:1337
+database_url: postgres://USERNAME:PASSWORD@localhost:5432/goforensics
+elasticsearch_addresses:
+  - http://127.0.0.1:9200
+elasticsearch_index: messages
+postmark_token: YOUR_POSTMARK_TOKEN
+kafka_address: localhost:9092
+kafka_topic: messages
+minio_bucket: goforensics
+minio_endpoint: 127.0.0.1:9000
+minio_access_key: YOUR_MINIO_ACCESS_KEY
+minio_secret_key: YOUR_MINIO_SECRET_KEY
+minio_secure: false
+microsoft_client_id: YOUR_MICROSOFT_CLIENT_ID
+microsoft_client_secret: YOUR_MICROSOFT_CLIENT_SECRET

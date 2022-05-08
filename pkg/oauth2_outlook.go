@@ -6,34 +6,37 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 )
 
-var OutlookClientID string
-var OutlookClientSecret string
+// Variables defining our Microsoft OAuth2 credentials.
+var (
+	MicrosoftClientID     string
+	MicrosoftClientSecret string
+)
 
 func init() {
-	OutlookClientID = os.Getenv("OUTLOOK_CLIENT_ID")
+	microsoftConfigurationVariables := []string{"microsoft_client_id", "microsoft_client_secret"}
 
-	if OutlookClientID == "" {
-		Logger.Fatal("unset OUTLOOK_CLIENT_ID environment variable")
+	for _, configurationVariable := range microsoftConfigurationVariables {
+		if !viper.IsSet(configurationVariable) {
+			Logger.Fatalf("unset %s configuration variable", configurationVariable)
+		}
 	}
 
-	OutlookClientSecret = os.Getenv("OUTLOOK_CLIENT_SECRET")
-
-	if OutlookClientSecret == "" {
-		Logger.Fatal("unset OUTLOOK_CLIENT_SECRET environment variable")
-	}
+	MicrosoftClientID = viper.GetString("microsoft_client_id")
+	MicrosoftClientSecret = viper.GetString("microsoft_client_secret")
 }
 
 var OutlookOAuth2Config = &oauth2.Config{
-	ClientID:     OutlookClientID,
-	ClientSecret: OutlookClientSecret,
-	RedirectURL:  "http://localhost:1337/outlook/emails/callback",
+	ClientID:     MicrosoftClientID,
+	ClientSecret: MicrosoftClientSecret,
+	RedirectURL:  fmt.Sprintf("%s/outlook/emails/callback", GoForensicsAPIURL),
 	Scopes: []string{
 		"offline_access",
 		"https://outlook.office.com/User.Read",
@@ -46,9 +49,9 @@ var OutlookOAuth2Config = &oauth2.Config{
 }
 
 var OutlookUserProfileOAuth2Config = &oauth2.Config{
-	ClientID:     OutlookClientID,
-	ClientSecret: OutlookClientSecret,
-	RedirectURL:  "http://localhost:1337/outlook/profile/callback",
+	ClientID:     MicrosoftClientID,
+	ClientSecret: MicrosoftClientSecret,
+	RedirectURL:  fmt.Sprintf("%s/outlook/profile/callback", GoForensicsAPIURL),
 	Scopes: []string{
 		"User.Read",
 		"https://graph.microsoft.com/User.Read",

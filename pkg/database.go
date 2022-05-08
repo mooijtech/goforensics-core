@@ -6,17 +6,17 @@ package core
 import (
 	"context"
 	"github.com/jackc/pgx/v4"
-	"os"
+	"github.com/spf13/viper"
 )
 
 // DatabaseURL defines our PostgreSQL database URL.
 var DatabaseURL string
 
 func init() {
-	DatabaseURL = os.Getenv("DATABASE_URL")
-
-	if DatabaseURL == "" {
-		Logger.Fatal("unset DATABASE_URL environment variable")
+	if viper.IsSet("database_url") {
+		DatabaseURL = viper.GetString("database_url")
+	} else {
+		Logger.Fatal("unset database_url configuration variable")
 	}
 }
 
