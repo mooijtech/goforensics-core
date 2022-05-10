@@ -17,6 +17,7 @@ type Project struct {
 }
 
 // Save saves the project to the database.
+// Use AddProjectUser to assign a project to a user.
 func (project *Project) Save(database *pgx.Conn) error {
 	preparedStatement := `
 	INSERT INTO project(uuid, name, creationDate) VALUES ($1, $2, $3)
@@ -24,6 +25,28 @@ func (project *Project) Save(database *pgx.Conn) error {
 	_, err := database.Exec(context.Background(), preparedStatement, project.UUID, project.Name, project.CreationDate)
 
 	return err
+}
+
+// AddProjectUser adds the user to the project.
+func AddProjectUser(projectUUID string, userUUID string, database *pgx.Conn) error {
+	preparedStatement := `
+	INSERT INTO project_user_junction(projectUUID, userUUID) VALUES ($1, $2)
+	`
+	_, err := database.Exec(context.Background(), preparedStatement, projectUUID, userUUID)
+
+	return err
+}
+
+// ProjectHasUser returns true if the project is assigned to the user.
+func ProjectHasUser(projectUUID string, userUUID string, database *pgx.Conn) bool {
+	preparedStatement := `
+	SELECT * FROM project_user_junction WHERE projectUUID = $1 AND userUUID = $2 LIMIT 1
+	`
+	row := database.QueryRow(context.Background(), preparedStatement, projectUUID, userUUID)
+
+	var projectUserJunction interface{}
+
+	return row.Scan(&projectUserJunction) == nil
 }
 
 // GetProjectByUUID returns the project with the specified UUID.
