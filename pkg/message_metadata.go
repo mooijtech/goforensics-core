@@ -42,9 +42,9 @@ func RemoveBookmark(messageUUID string, projectUUID string, database *pgx.Conn) 
 // GetBookmarksByProject returns all bookmarks .
 func GetBookmarksByProject(projectUUID string, database *pgx.Conn) ([]Message, error) {
 	preparedStatement := `
-	SELECT * FROM message_metadata WHERE projectUUID = $1
+	SELECT * FROM message_metadata WHERE projectUUID = $1 AND isBookmarked = $2
 	`
-	rows, err := database.Query(context.Background(), preparedStatement, projectUUID)
+	rows, err := database.Query(context.Background(), preparedStatement, projectUUID, true)
 
 	if err != nil {
 		return nil, err
@@ -61,15 +61,13 @@ func GetBookmarksByProject(projectUUID string, database *pgx.Conn) ([]Message, e
 			return nil, err
 		}
 
-		if messageMetadata.IsBookmarked {
-			message, err := GetMessageByUUID(messageMetadata.MessageUUID, projectUUID, database)
+		message, err := GetMessageByUUID(messageMetadata.MessageUUID, projectUUID, database)
 
-			if err != nil {
-				return nil, err
-			}
-
-			messages = append(messages, message)
+		if err != nil {
+			return nil, err
 		}
+
+		messages = append(messages, message)
 	}
 
 	rows.Close()
