@@ -13,7 +13,7 @@ require (
 	github.com/aquasecurity/esquery v0.2.0
 	github.com/elastic/go-elasticsearch/v7 v7.16.0
 	github.com/emersion/go-imap v1.2.0
-	github.com/emersion/go-message v0.15.0
+	github.com/emersion/go-message v0.16.0
 	github.com/emersion/go-sasl v0.0.0-20211008083017-0b9dcfb154ac
 	github.com/jackc/pgx/v4 v4.16.0
 	github.com/mattevans/postmark-go v0.1.5
