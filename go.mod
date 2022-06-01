@@ -18,7 +18,7 @@ require (
 	github.com/jackc/pgx/v4 v4.16.0
 	github.com/mattevans/postmark-go v0.1.5
 	github.com/mooijtech/go-pst/v4 v4.0.0
-	github.com/ory/kratos-client-go v0.9.0-alpha.3
+	github.com/ory/kratos-client-go v0.10.1
 	github.com/segmentio/kafka-go v0.4.31
 	github.com/spf13/viper v1.11.0
 	golang.org/x/oauth2 v0.0.0-20220524215830-622c5d57e401
