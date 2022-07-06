@@ -3,7 +3,7 @@ module github.com/mooijtech/goforensics-core
 go 1.18
 
 require (
-	github.com/minio/minio-go/v7 v7.0.15
+	github.com/minio/minio-go/v7 v7.0.31
 	github.com/segmentio/ksuid v1.0.4
 	github.com/sirupsen/logrus v1.8.1
 	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
